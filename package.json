@@ -1,0 +1,32 @@
+{
+  "name": "botmock-watson-export",
+  "version": "1.0.0",
+  "description": "transform Botmock projects into watson assistant skills",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/botmock/botmock-watson-export.git"
+  },
+  "keywords": [
+    "ibm",
+    "watson",
+    "assistant",
+    "botmock"
+  ],
+  "author": "Kevin Donahue <kevin@botmock.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/botmock/botmock-watson-export/issues"
+  },
+  "homepage": "https://github.com/botmock/botmock-watson-export#readme",
+  "dependencies": {
+    "botmock": "^1.0.1",
+    "minimist": "^1.2.0"
+  },
+  "devDependencies": {
+    "jest": "^23.6.0"
+  }
+}

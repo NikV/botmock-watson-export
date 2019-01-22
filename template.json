@@ -1,0 +1,13 @@
+{
+  "name": "",
+  "intents": [],
+  "entities": [],
+  "language": "en",
+  "metadata": {},
+  "description": "",
+  "dialog_nodes": [],
+  "workspace_id": "",
+  "counterexamples": [],
+  "learning_opt_out": false,
+  "status": "Non Existent"
+}
