@@ -25,7 +25,7 @@ const botmockArgs = [
     }
     const template = await fs.promises.readFile(`${__dirname}/template.json`, 'utf8');
     const deserial = JSON.parse(template);
-    deserial.workspace_id = process.env.WATSON_WORKSPACE_ID;
+    // deserial.workspace_id = process.env.WATSON_WORKSPACE_ID;
     deserial.name = project.name;
     deserial.intents = await getIntents();
     deserial.entities = await getEntities();
@@ -64,7 +64,7 @@ async function getEntities() {
       values: x.data.map(p => ({
         type: 'synonyms',
         value: p.value,
-        synonyms: p.synonyms.split(',')
+        synonyms: typeof p.synonyms !== 'undefined' ? p.synonyms.split(',') : []
       }))
     });
   }
@@ -76,6 +76,9 @@ async function getDialogNodes() {
   const nodes = [];
   for (const x of board.messages) {
     const [prev = {}] = x.previous_message_ids;
+    const text = Array.isArray(x.payload.text)
+      ? x.payload.text[0].body || ''
+      : x.payload.text || '';
     nodes.push({
       title: x.payload.nodeName ? x.payload.nodeName.replace(/\s/g, '-') : 'root',
       parent: prev.message_id || null,
@@ -83,7 +86,7 @@ async function getDialogNodes() {
       output: {
         generic: [
           {
-            values: [{ text: x.payload.text || '' }],
+            values: [{ text }],
             response_type: 'text'
           }
         ]
