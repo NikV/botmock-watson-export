@@ -1,22 +1,25 @@
+// const env = require('node-env-file');
+// env(`${__dirname}/.env`);
 const Botmock = require('botmock');
 const minimist = require('minimist');
 const fs = require('fs');
+const Provider = require('./Provider');
 const [, , ...args] = process.argv;
+const {
+  BOTMOCK_TOKEN,
+  BOTMOCK_TEAM_ID,
+  BOTMOCK_PROJECT_ID,
+  BOTMOCK_BOARD_ID
+} = process.env;
 const client = new Botmock({
-  api_token: process.env.BOTMOCK_TOKEN,
+  api_token: BOTMOCK_TOKEN,
   debug: !!minimist(args).d,
-  url: 'local'
+  url: minimist(args).u ? 'local' : 'app'
 });
-// const SKILL_SIZE_LIMIT = 1e6;
-const botmockArgs = [
-  process.env.BOTMOCK_TEAM_ID,
-  process.env.BOTMOCK_PROJECT_ID,
-  process.env.BOTMOCK_BOARD_ID
-];
 (async () => {
   const outdir = `${__dirname}/out`;
   try {
-    const project = await client.projects(...botmockArgs.slice(0, 2));
+    const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
     try {
       await fs.promises.access(`${outdir}/${project.name}.json`, fs.constants.R_OK);
     } catch (_) {
@@ -25,11 +28,11 @@ const botmockArgs = [
     }
     const template = await fs.promises.readFile(`${__dirname}/template.json`, 'utf8');
     const deserial = JSON.parse(template);
-    // deserial.workspace_id = process.env.WATSON_WORKSPACE_ID;
-    deserial.name = project.name;
+    const provider = new Provider({ client, platform: project.platform });
+    deserial.dialog_nodes = await provider.createDialogNodes();
     deserial.intents = await getIntents();
     deserial.entities = await getEntities();
-    deserial.dialog_nodes = await getDialogNodes();
+    deserial.name = project.name;
     await fs.promises.writeFile(
       `${outdir}/${project.name}.json`,
       JSON.stringify(deserial)
@@ -41,7 +44,7 @@ const botmockArgs = [
   }
 })();
 async function getIntents() {
-  const res = await client.intents(...botmockArgs.slice(0, 2));
+  const res = await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const intents = [];
   for (const x of res) {
     intents.push({
@@ -54,7 +57,7 @@ async function getIntents() {
   return intents;
 }
 async function getEntities() {
-  const res = await client.entities(...botmockArgs.slice(0, 2));
+  const res = await client.entities(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const entities = [];
   for (const x of res) {
     entities.push({
@@ -69,29 +72,4 @@ async function getEntities() {
     });
   }
   return entities;
-}
-async function getDialogNodes() {
-  // const res = await client.variables(...botmockArgs.slice(0, 2));
-  const { board } = await client.boards(...botmockArgs);
-  const nodes = [];
-  for (const x of board.messages) {
-    const [prev = {}] = x.previous_message_ids;
-    const text = Array.isArray(x.payload.text)
-      ? x.payload.text[0].body || ''
-      : x.payload.text || '';
-    nodes.push({
-      title: x.payload.nodeName ? x.payload.nodeName.replace(/\s/g, '-') : 'root',
-      parent: prev.message_id || null,
-      dialog_node: x.message_id,
-      output: {
-        generic: [
-          {
-            values: [{ text }],
-            response_type: 'text'
-          }
-        ]
-      }
-    });
-  }
-  return nodes;
 }
