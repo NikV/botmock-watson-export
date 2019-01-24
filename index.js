@@ -1,5 +1,5 @@
-// const env = require('node-env-file');
-// env(`${__dirname}/.env`);
+const env = require('node-env-file');
+env(`${__dirname}/.env`);
 const Botmock = require('botmock');
 const minimist = require('minimist');
 const fs = require('fs');

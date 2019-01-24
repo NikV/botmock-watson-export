@@ -1,7 +1,7 @@
 {
   "name": "botmock-watson-export",
   "version": "1.0.0",
-  "description": "transform Botmock projects into watson assistant skills",
+  "description": "transform Botmock projects into Watson Assistant skills",
   "main": "index.js",
   "scripts": {
     "test": "jest"
