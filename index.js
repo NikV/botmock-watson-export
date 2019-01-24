@@ -2,8 +2,9 @@ const env = require('node-env-file');
 env(`${__dirname}/.env`);
 const Botmock = require('botmock');
 const minimist = require('minimist');
+// const retry = require('async-retry');
 const fs = require('fs');
-const Provider = require('./Provider');
+const Provider = require('./lib/Provider');
 const [, , ...args] = process.argv;
 const {
   BOTMOCK_TOKEN,
@@ -17,26 +18,25 @@ const client = new Botmock({
   url: minimist(args).u ? 'local' : 'app'
 });
 (async () => {
-  const outdir = `${__dirname}/out`;
   try {
+    const template = await fs.promises.readFile(`${__dirname}/template.json`, 'utf8');
     const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+    const deserial = JSON.parse(template);
+    deserial.dialog_nodes = await getDialogNodes(project.platform);
+    deserial.intents = await getIntents();
+    deserial.entities = await getEntities();
+    // deserial.created = project.created_at.date;
+    // deserial.updated = project.updated_at.date;
+    deserial.name = project.name;
+    const outdir = `${__dirname}/out`;
     try {
       await fs.promises.access(outdir, fs.constants.R_OK);
     } catch (_) {
       // we do not have read access; create this dir
       await fs.promises.mkdir(outdir);
     }
-    const template = await fs.promises.readFile(`${__dirname}/template.json`, 'utf8');
-    const deserial = JSON.parse(template);
-    const provider = new Provider({ client, platform: project.platform });
-    deserial.dialog_nodes = await provider.createDialogNodes();
-    deserial.intents = await getIntents();
-    deserial.entities = await getEntities();
-    deserial.name = project.name;
-    await fs.promises.writeFile(
-      `${outdir}/${project.name}.json`,
-      JSON.stringify(deserial)
-    );
+    const data = JSON.stringify(deserial);
+    await fs.promises.writeFile(`${outdir}/${project.name}.json`, data);
     console.log('done');
   } catch (err) {
     console.error(err.stack);
@@ -72,4 +72,39 @@ async function getEntities() {
     });
   }
   return entities;
+}
+async function getDialogNodes(platform) {
+  const vs = await client.variables(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+  const context = vs.reduce((acc, v) => ({ ...acc, [v.name]: v.default_value }), {});
+  const { board } = await client.boards(
+    BOTMOCK_TEAM_ID,
+    BOTMOCK_PROJECT_ID,
+    BOTMOCK_BOARD_ID
+  );
+  let i;
+  const nodes = [];
+  const siblingMap = {};
+  const provider = new Provider(platform);
+  for (const x of board.messages) {
+    const [prev = {}] = x.previous_message_ids;
+    // We need to hold on to siblings so that we can define a `previous_sibling`
+    // from the perspective of another node.
+    if (x.next_message_ids.length > 1) {
+      siblingMap[x.message_id] = x.next_message_ids.map(m => m.message_id);
+    }
+    let previous_sibling;
+    const siblings = siblingMap[prev.message_id] || [];
+    if ((i = siblings.findIndex(s => x.message_id === s))) {
+      previous_sibling = siblings[i - 1];
+    }
+    nodes.push({
+      ...provider.create(x.message_type, x.payload),
+      title: x.payload.nodeName ? x.payload.nodeName.replace(/\s/g, '-') : '_',
+      previous_sibling,
+      parent: prev.message_id,
+      dialog_node: x.message_id,
+      context
+    });
+  }
+  return nodes;
 }
