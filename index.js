@@ -21,9 +21,9 @@ const client = new Botmock({
   try {
     const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
     try {
-      await fs.promises.access(`${outdir}/${project.name}.json`, fs.constants.R_OK);
+      await fs.promises.access(outdir, fs.constants.R_OK);
     } catch (_) {
-      // we do not have read access (i.e. this path does not exist)
+      // we do not have read access; create this dir
       await fs.promises.mkdir(outdir);
     }
     const template = await fs.promises.readFile(`${__dirname}/template.json`, 'utf8');
