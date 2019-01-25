@@ -83,6 +83,7 @@ async function getDialogNodes(platform) {
     BOTMOCK_BOARD_ID
   );
   let i;
+  let incidentIntent;
   const nodes = [];
   const siblingMap = {};
   const provider = new Provider(platform);
@@ -103,8 +104,6 @@ async function getDialogNodes(platform) {
     if ((i = siblings.findIndex(s => x.message_id === s))) {
       previous_sibling = siblings[i - 1];
     }
-    const [{ action = {} } = {}] = x.next_message_ids;
-    const intent = action.payload ? `#${toDashCase(action.payload)}` : '';
     nodes.push({
       output: {
         [platform]: provider.create(x.message_type, x.payload),
@@ -121,16 +120,20 @@ async function getDialogNodes(platform) {
       next_step: x.next_message_ids[0]
         ? {
             behavior: 'jump_to',
-            selector: 'user_input',
+            selector: x.is_root ? 'body' : 'user_input',
             dialog_node: x.next_message_ids[0].message_id
           }
         : null,
       previous_sibling,
-      conditions: x.is_root ? 'welcome' : intent,
+      conditions: x.is_root ? 'welcome' : incidentIntent || '',
       parent: prev.message_id,
       dialog_node: x.message_id,
       context
     });
+    const [{ action = {} } = {}] = x.next_message_ids;
+    if (action.payload) {
+      incidentIntent = `#${toDashCase(action.payload)}`;
+    }
   }
   return nodes;
 }
