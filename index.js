@@ -2,7 +2,6 @@ const env = require('node-env-file');
 env(`${__dirname}/.env`);
 const Botmock = require('botmock');
 const minimist = require('minimist');
-// const retry = require('async-retry');
 const fs = require('fs');
 const Provider = require('./lib/Provider');
 const [, , ...args] = process.argv;
@@ -119,6 +118,13 @@ async function getDialogNodes(platform) {
         ]
       },
       title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
+      next_step: x.next_message_ids[0]
+        ? {
+            behavior: 'jump_to',
+            selector: 'user_input',
+            dialog_node: x.next_message_ids[0].message_id
+          }
+        : null,
       previous_sibling,
       conditions: x.is_root ? 'welcome' : intent,
       parent: prev.message_id,
