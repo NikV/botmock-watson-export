@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/botmock/botmock-watson-export#readme",
   "dependencies": {
-    "botmock": "^1.0.1",
+    "botmock": "^1.1.0",
     "minimist": "^1.2.0",
     "node-env-file": "^0.1.8"
   },
