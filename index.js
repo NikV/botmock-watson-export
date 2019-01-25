@@ -50,7 +50,7 @@ async function getIntents() {
   const intents = [];
   for (const x of res) {
     intents.push({
-      intent: x.name,
+      intent: toDashCase(x.name),
       examples: x.utterances.map(u => ({ text: u.text || '_' })),
       created: x.created_at.date,
       updated: x.updated_at.date
@@ -89,7 +89,9 @@ async function getDialogNodes(platform) {
   const provider = new Provider(platform);
   for (const x of board.messages) {
     if (x.message_type !== 'text') {
-      throw new Error(`found node of type '${x.message_type}'; only 'text' allowed`);
+      throw new Error(
+        `Found ${x.message_type} node. Your project should only include bot text nodes.`
+      );
     }
     const [prev = {}] = x.previous_message_ids;
     // We need to hold on to siblings so that we can define a `previous_sibling`
@@ -102,22 +104,23 @@ async function getDialogNodes(platform) {
     if ((i = siblings.findIndex(s => x.message_id === s))) {
       previous_sibling = siblings[i - 1];
     }
-    const text = x.is_root ? 'welcome!' : x.payload.text;
     const [{ action = {} } = {}] = x.next_message_ids;
-    const intent = action.payload;
+    const intent = action.payload ? `#${toDashCase(action.payload)}` : '';
     nodes.push({
       output: {
         [platform]: provider.create(x.message_type, x.payload),
         generic: [
           {
             response_type: 'text',
-            values: [{ text }]
+            values: [
+              { text: x.is_root ? `This is a ${platform} project!` : x.payload.text }
+            ]
           }
         ]
       },
       title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
       previous_sibling,
-      conditions: x.is_root ? '#welcome' : `#${toDashCase(action.payload)}`,
+      conditions: x.is_root ? 'welcome' : intent,
       parent: prev.message_id,
       dialog_node: x.message_id,
       context
