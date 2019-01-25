@@ -25,8 +25,8 @@ const client = new Botmock({
     deserial.dialog_nodes = await getDialogNodes(project.platform);
     deserial.intents = await getIntents();
     deserial.entities = await getEntities();
-    // deserial.created = project.created_at.date;
-    // deserial.updated = project.updated_at.date;
+    deserial.created = project.created_at.date;
+    deserial.updated = project.updated_at.date;
     deserial.name = project.name;
     const outdir = `${__dirname}/out`;
     try {
@@ -35,8 +35,10 @@ const client = new Botmock({
       // we do not have read access; create this dir
       await fs.promises.mkdir(outdir);
     }
-    const data = JSON.stringify(deserial);
-    await fs.promises.writeFile(`${outdir}/${project.name}.json`, data);
+    await fs.promises.writeFile(
+      `${outdir}/${toDashCase(project.name)}.json`,
+      JSON.stringify(deserial)
+    );
     console.log('done');
   } catch (err) {
     console.error(err.stack);
@@ -49,7 +51,7 @@ async function getIntents() {
   for (const x of res) {
     intents.push({
       intent: x.name,
-      examples: x.utterances.map(u => ({ text: u.text })),
+      examples: x.utterances.map(u => ({ text: u.text || '_' })),
       created: x.created_at.date,
       updated: x.updated_at.date
     });
@@ -61,7 +63,7 @@ async function getEntities() {
   const entities = [];
   for (const x of res) {
     entities.push({
-      entity: x.name,
+      entity: toDashCase(x.name),
       created: x.created_at.date,
       updated: x.updated_at.date,
       values: x.data.map(p => ({
@@ -86,6 +88,9 @@ async function getDialogNodes(platform) {
   const siblingMap = {};
   const provider = new Provider(platform);
   for (const x of board.messages) {
+    if (x.message_type !== 'text') {
+      throw new Error(`found node of type '${x.message_type}'; only 'text' allowed`);
+    }
     const [prev = {}] = x.previous_message_ids;
     // We need to hold on to siblings so that we can define a `previous_sibling`
     // from the perspective of another node.
@@ -97,14 +102,29 @@ async function getDialogNodes(platform) {
     if ((i = siblings.findIndex(s => x.message_id === s))) {
       previous_sibling = siblings[i - 1];
     }
+    const text = x.is_root ? 'welcome!' : x.payload.text;
+    const [{ action = {} } = {}] = x.next_message_ids;
+    const intent = action.payload;
     nodes.push({
-      ...provider.create(x.message_type, x.payload),
-      title: x.payload.nodeName ? x.payload.nodeName.replace(/\s/g, '-') : '_',
+      output: {
+        [platform]: provider.create(x.message_type, x.payload),
+        generic: [
+          {
+            response_type: 'text',
+            values: [{ text }]
+          }
+        ]
+      },
+      title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
       previous_sibling,
+      conditions: x.is_root ? '#welcome' : `#${toDashCase(action.payload)}`,
       parent: prev.message_id,
       dialog_node: x.message_id,
       context
     });
   }
   return nodes;
+}
+function toDashCase(str = '') {
+  return str.toLowerCase().replace(/\s/g, '-');
 }
