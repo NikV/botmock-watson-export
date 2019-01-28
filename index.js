@@ -68,7 +68,7 @@ async function getEntities() {
       values: x.data.map(p => ({
         type: 'synonyms',
         value: p.value,
-        synonyms: typeof p.synonyms !== 'undefined' ? p.synonyms.split(',') : []
+        synonyms: Array.isArray(p.synonyms.split) ? p.synonyms.split(',') : p.synonyms
       }))
     });
   }
@@ -138,5 +138,8 @@ async function getDialogNodes(platform) {
   return nodes;
 }
 function toDashCase(str = '') {
-  return str.toLowerCase().replace(/\s/g, '-');
+  return str
+    .toLowerCase()
+    .replace(/\s/g, '-')
+    .replace(/_/g, '');
 }
