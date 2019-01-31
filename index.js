@@ -83,8 +83,8 @@ async function getDialogNodes(platform) {
     BOTMOCK_BOARD_ID
   );
   let i;
-  let incidentIntent;
   const nodes = [];
+  const conditionsMap = {};
   const siblingMap = {};
   const provider = new Provider(platform);
   for (const x of board.messages) {
@@ -93,13 +93,13 @@ async function getDialogNodes(platform) {
         `Found ${x.message_type} node. Your project should only include bot text nodes.`
       );
     }
-    const [prev = {}] = x.previous_message_ids;
     // We need to hold on to siblings so that we can define a `previous_sibling`
     // from the perspective of another node.
     if (x.next_message_ids.length > 1) {
       siblingMap[x.message_id] = x.next_message_ids.map(m => m.message_id);
     }
     let previous_sibling;
+    const [prev = {}] = x.previous_message_ids;
     const siblings = siblingMap[prev.message_id] || [];
     if ((i = siblings.findIndex(s => x.message_id === s))) {
       previous_sibling = siblings[i - 1];
@@ -125,7 +125,7 @@ async function getDialogNodes(platform) {
           }
         : null,
       previous_sibling,
-      conditions: x.is_root ? 'welcome' : incidentIntent || '',
+      conditions: x.is_root ? 'welcome' : conditionsMap[x.message_id],
       parent: prev.message_id,
       dialog_node: x.message_id,
       context: Array.isArray(x.payload.context)
@@ -135,9 +135,12 @@ async function getDialogNodes(platform) {
           )
         : {}
     });
-    const [{ action = {} } = {}] = x.next_message_ids;
-    if (action.payload) {
-      incidentIntent = `#${toDashCase(action.payload)}`;
+    // We maintain a lookup table relating node id to the intent incident on it
+    for (const y of x.next_message_ids) {
+      if (!y.action.payload) {
+        continue;
+      }
+      conditionsMap[y.message_id] = `#${toDashCase(y.action.payload)}`;
     }
   }
   return nodes;

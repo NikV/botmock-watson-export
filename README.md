@@ -21,7 +21,7 @@ BOTMOCK_PROJECT_ID=""
 BOTMOCK_BOARD_ID=""
 ```
 
-* Run `node index.js`
+* Run `node index.js -u app` (where `app` can be substituted for other hostnames)
 
 * Find generated JSON in `./out`
 
