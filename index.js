@@ -117,15 +117,19 @@ async function getDialogNodes(platform) {
         ]
       },
       title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
-      next_step: x.next_message_ids[0]
+      next_step: x.next_message_ids.every(i => !i.action.payload)
         ? {
+            behavior: 'skip_user_input',
+            selector: 'body',
+            dialog_node: x.next_message_ids[0].message_id
+          }
+        : {
             behavior: 'jump_to',
             selector: x.is_root ? 'body' : 'user_input',
             dialog_node: x.next_message_ids[0].message_id
-          }
-        : null,
+          },
       previous_sibling,
-      conditions: x.is_root ? 'welcome' : conditionsMap[x.message_id],
+      conditions: x.is_root ? 'welcome' : conditionsMap[x.message_id] || 'anything_else',
       parent: prev.message_id,
       dialog_node: x.message_id,
       context: Array.isArray(x.payload.context)
