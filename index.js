@@ -11,10 +11,11 @@ const {
   BOTMOCK_PROJECT_ID,
   BOTMOCK_BOARD_ID
 } = process.env;
+const { u, d } = minimist(args);
 const client = new Botmock({
   api_token: BOTMOCK_TOKEN,
-  debug: !!minimist(args).d,
-  url: minimist(args).u ? 'local' : 'app'
+  debug: !!d,
+  url: u || 'app'
 });
 (async () => {
   try {
@@ -75,8 +76,7 @@ async function getEntities() {
   return entities;
 }
 async function getDialogNodes(platform) {
-  const vs = await client.variables(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
-  const context = vs.reduce((acc, v) => ({ ...acc, [v.name]: v.default_value }), {});
+  // const variables = await client.variables(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const { board } = await client.boards(
     BOTMOCK_TEAM_ID,
     BOTMOCK_PROJECT_ID,
@@ -128,7 +128,12 @@ async function getDialogNodes(platform) {
       conditions: x.is_root ? 'welcome' : incidentIntent || '',
       parent: prev.message_id,
       dialog_node: x.message_id,
-      context
+      context: Array.isArray(x.payload.context)
+        ? x.payload.context.reduce(
+            (acc, k) => ({ ...acc, [parseVar(k.name)]: k.default_value }),
+            {}
+          )
+        : {}
     });
     const [{ action = {} } = {}] = x.next_message_ids;
     if (action.payload) {
@@ -136,6 +141,9 @@ async function getDialogNodes(platform) {
     }
   }
   return nodes;
+}
+function parseVar(str = '') {
+  return str.replace(/%/g, '');
 }
 function toDashCase(str = '') {
   return str
