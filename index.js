@@ -1,9 +1,10 @@
 const env = require('node-env-file');
 env(`${__dirname}/.env`);
+const fs = require('fs');
 const Botmock = require('botmock');
 const minimist = require('minimist');
-const fs = require('fs');
 const Provider = require('./lib/Provider');
+
 const [, , ...args] = process.argv;
 const {
   BOTMOCK_TOKEN,
@@ -11,15 +12,20 @@ const {
   BOTMOCK_PROJECT_ID,
   BOTMOCK_BOARD_ID
 } = process.env;
+
 const { u, d } = minimist(args);
 const client = new Botmock({
   api_token: BOTMOCK_TOKEN,
   debug: !!d,
   url: u || 'app'
 });
+
 (async () => {
   try {
-    const template = await fs.promises.readFile(`${__dirname}/template.json`, 'utf8');
+    const template = await fs.promises.readFile(
+      `${__dirname}/template.json`,
+      'utf8'
+    );
     const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
     const deserial = JSON.parse(template);
     deserial.dialog_nodes = await getDialogNodes(project.platform);
@@ -45,6 +51,7 @@ const client = new Botmock({
     process.exit(1);
   }
 })();
+
 async function getIntents() {
   const res = await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const intents = [];
@@ -58,6 +65,7 @@ async function getIntents() {
   }
   return intents;
 }
+
 async function getEntities() {
   const res = await client.entities(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const entities = [];
@@ -69,12 +77,15 @@ async function getEntities() {
       values: x.data.map(p => ({
         type: 'synonyms',
         value: p.value,
-        synonyms: Array.isArray(p.synonyms.split) ? p.synonyms.split(',') : p.synonyms
+        synonyms: Array.isArray(p.synonyms.split)
+          ? p.synonyms.split(',')
+          : p.synonyms
       }))
     });
   }
   return entities;
 }
+
 async function getDialogNodes(platform) {
   // const variables = await client.variables(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const { board } = await client.boards(
@@ -87,12 +98,14 @@ async function getDialogNodes(platform) {
   const conditionsMap = {};
   const siblingMap = {};
   const provider = new Provider(platform);
-  for (const x of board.messages) {
-    if (x.message_type !== 'text') {
-      throw new Error(
-        `Found ${x.message_type} node. Your project should only include bot text nodes.`
-      );
-    }
+  for (let x of board.messages) {
+    // if (x.message_type !== 'text') {
+    //   throw new Error(
+    //     `Found ${
+    //       x.message_type
+    //     } node. Your project should only include bot text nodes.`
+    //   );
+    // }
     // We need to hold on to siblings so that we can define a `previous_sibling`
     // from the perspective of another node.
     if (x.next_message_ids.length > 1) {
@@ -104,14 +117,21 @@ async function getDialogNodes(platform) {
     if ((i = siblings.findIndex(s => x.message_id === s))) {
       previous_sibling = siblings[i - 1];
     }
+    const [{ message_id: nextMessageId } = {}] = x.next_message_ids;
     nodes.push({
       output: {
-        [platform]: provider.create(x.message_type, x.payload),
+        ...(platform === 'slack'
+          ? { [platform]: provider.create(x.message_type, x.payload) }
+          : {}),
         generic: [
           {
             response_type: 'text',
             values: [
-              { text: x.is_root ? `This is a ${platform} project!` : x.payload.text }
+              {
+                text: x.is_root
+                  ? `This is a ${platform} project!`
+                  : x.payload.text
+              }
             ]
           }
         ]
@@ -121,15 +141,17 @@ async function getDialogNodes(platform) {
         ? {
             behavior: 'skip_user_input',
             selector: 'body',
-            dialog_node: x.next_message_ids[0].message_id
+            dialog_node: nextMessageId
           }
         : {
             behavior: 'jump_to',
             selector: x.is_root ? 'body' : 'user_input',
-            dialog_node: x.next_message_ids[0].message_id
+            dialog_node: nextMessageId
           },
       previous_sibling,
-      conditions: x.is_root ? 'welcome' : conditionsMap[x.message_id] || 'anything_else',
+      conditions: x.is_root
+        ? 'welcome'
+        : conditionsMap[x.message_id] || 'anything_else',
       parent: prev.message_id,
       dialog_node: x.message_id,
       context: Array.isArray(x.payload.context)
@@ -149,9 +171,11 @@ async function getDialogNodes(platform) {
   }
   return nodes;
 }
+
 function parseVar(str = '') {
   return str.replace(/%/g, '');
 }
+
 function toDashCase(str = '') {
   return str
     .toLowerCase()

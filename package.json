@@ -4,7 +4,8 @@
   "description": "transform Botmock projects into Watson Assistant skills",
   "main": "index.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "start": "node index.js -u app"
   },
   "repository": {
     "type": "git",
