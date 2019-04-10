@@ -1,8 +1,10 @@
 (await import('dotenv')).config();
+// import debug from 'debug';
 import fs from 'fs';
 import Botmock from 'botmock';
 import minimist from 'minimist';
 import Provider from './lib/Provider';
+import { supportedNodeTypes } from './util';
 
 process.on('unhandledRejection', err => {
   console.error(err);
@@ -30,35 +32,40 @@ const client = new Botmock({
   url: url || 'app'
 });
 
-const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
 const template = await fs.promises.readFile(
   `${__dirname}/template.json`,
   'utf8'
 );
-const deserial = JSON.parse(template);
+const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+const deserializedTemplate = JSON.parse(template);
 
 try {
-  deserial.dialog_nodes = await getDialogNodes(project.platform);
-  deserial.intents = await getIntents();
-  deserial.entities = await getEntities();
-  deserial.created = project.created_at.date;
-  deserial.updated = project.updated_at.date;
-  deserial.name = project.name;
   const outdir = `${__dirname}/out`;
   try {
     await fs.promises.access(outdir, fs.constants.R_OK);
   } catch (_) {
-    // we do not have read access; create this dir
+    // We do not have read access; create the directory that will hold the output
     await fs.promises.mkdir(outdir);
   }
+  // Write a single .json file containing the project data
   await fs.promises.writeFile(
     `${outdir}/${toDashCase(project.name)}.json`,
-    JSON.stringify(deserial)
+    JSON.stringify({
+      ...deserializedTemplate,
+      dialog_nodes: await getDialogNodes(project.platform),
+      intents: await getIntents(),
+      entities: await getEntities(),
+      created: project.created_at.date,
+      updated: project.updated_at.date,
+      name: project.name
+    })
   );
   console.log('done');
 } catch (err) {
   console.error(err.stack);
   process.exit(1);
+} finally {
+  // ..
 }
 
 async function getIntents() {
@@ -96,7 +103,6 @@ async function getEntities() {
 }
 
 async function getDialogNodes(platform) {
-  // const variables = await client.variables(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
   const { board } = await client.boards(
     BOTMOCK_TEAM_ID,
     BOTMOCK_PROJECT_ID,
@@ -108,13 +114,13 @@ async function getDialogNodes(platform) {
   const siblingMap = {};
   const provider = new Provider(platform);
   for (let x of board.messages) {
-    // if (x.message_type !== 'text') {
-    //   throw new Error(
-    //     `Found ${
-    //       x.message_type
-    //     } node. Your project should only include bot text nodes.`
-    //   );
-    // }
+    // console.log(x);
+    // TODO: doc
+    if (!supportedNodeTypes.has(x.message_type)) {
+      console.warn(
+        `${x.message_id} is an unsupported type and will be coerced to text`
+      );
+    }
     // We need to hold on to siblings so that we can define a `previous_sibling`
     // from the perspective of another node.
     if (x.next_message_ids.length > 1) {
@@ -137,7 +143,6 @@ async function getDialogNodes(platform) {
             response_type: 'text',
             values: [
               {
-                // TODO: non-text nodes must map to this
                 text: x.is_root
                   ? `This is a ${platform} project!`
                   : x.payload.text
