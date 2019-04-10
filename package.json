@@ -5,11 +5,14 @@
   "main": "index.js",
   "scripts": {
     "test": "jest",
-    "start": "node index.js -u app"
+    "start": "node --no-warnings -r esm index.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/botmock/botmock-watson-export.git"
+  "prettier": {
+    "singleQuote": true,
+    "printWidth": 80
+  },
+  "esm": {
+    "await": true
   },
   "keywords": [
     "ibm",
@@ -17,6 +20,10 @@
     "assistant",
     "botmock"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/botmock/botmock-watson-export.git"
+  },
   "author": "Kevin Donahue <kevin@botmock.com>",
   "license": "MIT",
   "bugs": {
@@ -25,8 +32,9 @@
   "homepage": "https://github.com/botmock/botmock-watson-export#readme",
   "dependencies": {
     "botmock": "^1.1.0",
-    "minimist": "^1.2.0",
-    "node-env-file": "^0.1.8"
+    "dotenv": "^7.0.0",
+    "esm": "^3.2.22",
+    "minimist": "^1.2.0"
   },
   "devDependencies": {
     "jest": "^23.6.0"

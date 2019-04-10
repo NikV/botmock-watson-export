@@ -1,9 +1,8 @@
-const env = require('node-env-file');
-env(`${__dirname}/.env`);
-const fs = require('fs');
-const Botmock = require('botmock');
-const minimist = require('minimist');
-const Provider = require('./lib/Provider');
+(await import('dotenv')).config();
+import fs from 'fs';
+import Botmock from 'botmock';
+import minimist from 'minimist';
+import Provider from './lib/Provider';
 
 const [, , ...args] = process.argv;
 const {
@@ -20,37 +19,35 @@ const client = new Botmock({
   url: u || 'app'
 });
 
-(async () => {
+try {
+  const template = await fs.promises.readFile(
+    `${__dirname}/template.json`,
+    'utf8'
+  );
+  const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+  const deserial = JSON.parse(template);
+  deserial.dialog_nodes = await getDialogNodes(project.platform);
+  deserial.intents = await getIntents();
+  deserial.entities = await getEntities();
+  deserial.created = project.created_at.date;
+  deserial.updated = project.updated_at.date;
+  deserial.name = project.name;
+  const outdir = `${__dirname}/out`;
   try {
-    const template = await fs.promises.readFile(
-      `${__dirname}/template.json`,
-      'utf8'
-    );
-    const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
-    const deserial = JSON.parse(template);
-    deserial.dialog_nodes = await getDialogNodes(project.platform);
-    deserial.intents = await getIntents();
-    deserial.entities = await getEntities();
-    deserial.created = project.created_at.date;
-    deserial.updated = project.updated_at.date;
-    deserial.name = project.name;
-    const outdir = `${__dirname}/out`;
-    try {
-      await fs.promises.access(outdir, fs.constants.R_OK);
-    } catch (_) {
-      // we do not have read access; create this dir
-      await fs.promises.mkdir(outdir);
-    }
-    await fs.promises.writeFile(
-      `${outdir}/${toDashCase(project.name)}.json`,
-      JSON.stringify(deserial)
-    );
-    console.log('done');
-  } catch (err) {
-    console.error(err.stack);
-    process.exit(1);
+    await fs.promises.access(outdir, fs.constants.R_OK);
+  } catch (_) {
+    // we do not have read access; create this dir
+    await fs.promises.mkdir(outdir);
   }
-})();
+  await fs.promises.writeFile(
+    `${outdir}/${toDashCase(project.name)}.json`,
+    JSON.stringify(deserial)
+  );
+  console.log('done');
+} catch (err) {
+  console.error(err.stack);
+  process.exit(1);
+}
 
 async function getIntents() {
   const res = await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
@@ -78,7 +75,7 @@ async function getEntities() {
         type: 'synonyms',
         value: p.value,
         synonyms: Array.isArray(p.synonyms.split)
-          ? p.synonyms.split(',')
+          ? p.synonyms.map(toDashCase).split(',')
           : p.synonyms
       }))
     });
@@ -128,6 +125,7 @@ async function getDialogNodes(platform) {
             response_type: 'text',
             values: [
               {
+                // TODO: non-text nodes must map to this
                 text: x.is_root
                   ? `This is a ${platform} project!`
                   : x.payload.text
