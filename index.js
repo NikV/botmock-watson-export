@@ -4,7 +4,19 @@ import Botmock from 'botmock';
 import minimist from 'minimist';
 import Provider from './lib/Provider';
 
+process.on('unhandledRejection', err => {
+  console.error(err);
+  process.exit(1);
+});
+
+process.on('uncaughtException', err => {
+  console.error(err);
+  process.exit(1);
+});
+
 const [, , ...args] = process.argv;
+const { u: url, d: debug } = minimist(args);
+
 const {
   BOTMOCK_TOKEN,
   BOTMOCK_TEAM_ID,
@@ -12,20 +24,20 @@ const {
   BOTMOCK_BOARD_ID
 } = process.env;
 
-const { u, d } = minimist(args);
 const client = new Botmock({
   api_token: BOTMOCK_TOKEN,
-  debug: !!d,
-  url: u || 'app'
+  debug: !!debug,
+  url: url || 'app'
 });
 
+const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+const template = await fs.promises.readFile(
+  `${__dirname}/template.json`,
+  'utf8'
+);
+const deserial = JSON.parse(template);
+
 try {
-  const template = await fs.promises.readFile(
-    `${__dirname}/template.json`,
-    'utf8'
-  );
-  const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
-  const deserial = JSON.parse(template);
   deserial.dialog_nodes = await getDialogNodes(project.platform);
   deserial.intents = await getIntents();
   deserial.entities = await getEntities();
