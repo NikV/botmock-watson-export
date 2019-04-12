@@ -1,10 +1,10 @@
 (await import('dotenv')).config();
-// import debug from 'debug';
-import fs from 'fs';
+import chalk from 'chalk';
 import Botmock from 'botmock';
 import minimist from 'minimist';
+import fs from 'fs';
 import Provider from './lib/Provider';
-import { supportedNodeTypes } from './util';
+import { parseVar, toDashCase, supportedNodeTypes } from './util';
 
 process.on('unhandledRejection', err => {
   console.error(err);
@@ -16,40 +16,40 @@ process.on('uncaughtException', err => {
   process.exit(1);
 });
 
-const [, , ...args] = process.argv;
-const { u: url, d: debug } = minimist(args);
-
 const {
   BOTMOCK_TOKEN,
   BOTMOCK_TEAM_ID,
   BOTMOCK_PROJECT_ID,
   BOTMOCK_BOARD_ID
 } = process.env;
+const [, , ...args] = process.argv;
+const { u, d } = minimist(args);
 
 const client = new Botmock({
   api_token: BOTMOCK_TOKEN,
-  debug: !!debug,
-  url: url || 'app'
+  debug: !!d,
+  url: u || 'app'
 });
 
+const OUTPUT_PATH = `${__dirname}/out`;
 const template = await fs.promises.readFile(
   `${__dirname}/template.json`,
   'utf8'
 );
-const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
-const deserializedTemplate = JSON.parse(template);
 
+// Create output directory if it does not already exist
 try {
-  const outdir = `${__dirname}/out`;
-  try {
-    await fs.promises.access(outdir, fs.constants.R_OK);
-  } catch (_) {
-    // We do not have read access; create the directory that will hold the output
-    await fs.promises.mkdir(outdir);
-  }
+  await fs.promises.access(OUTPUT_PATH, fs.constants.R_OK);
+} catch (_) {
+  await fs.promises.mkdir(OUTPUT_PATH);
+}
+
+const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+try {
+  const deserializedTemplate = JSON.parse(template);
   // Write a single .json file containing the project data
   await fs.promises.writeFile(
-    `${outdir}/${toDashCase(project.name)}.json`,
+    `${OUTPUT_PATH}/${toDashCase(project.name)}.json`,
     JSON.stringify({
       ...deserializedTemplate,
       dialog_nodes: await getDialogNodes(project.platform),
@@ -60,12 +60,10 @@ try {
       name: project.name
     })
   );
-  console.log('done');
+  console.log(chalk.bold('done'));
 } catch (err) {
   console.error(err.stack);
   process.exit(1);
-} finally {
-  // ..
 }
 
 async function getIntents() {
@@ -103,6 +101,7 @@ async function getEntities() {
 }
 
 async function getDialogNodes(platform) {
+  const provider = new Provider(platform);
   const { board } = await client.boards(
     BOTMOCK_TEAM_ID,
     BOTMOCK_PROJECT_ID,
@@ -112,13 +111,14 @@ async function getDialogNodes(platform) {
   const nodes = [];
   const conditionsMap = {};
   const siblingMap = {};
-  const provider = new Provider(platform);
   for (let x of board.messages) {
-    // console.log(x);
-    // TODO: doc
     if (!supportedNodeTypes.has(x.message_type)) {
       console.warn(
-        `${x.message_id} is an unsupported type and will be coerced to text`
+        chalk.dim(
+          `"${
+            x.message_type
+          }" is an unsupported node type and will be coerced to text`
+        )
       );
     }
     // We need to hold on to siblings so that we can define a `previous_sibling`
@@ -152,6 +152,7 @@ async function getDialogNodes(platform) {
         ]
       },
       title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
+      // TODO: doc
       next_step: x.next_message_ids.every(i => !i.action.payload)
         ? {
             behavior: 'skip_user_input',
@@ -169,6 +170,7 @@ async function getDialogNodes(platform) {
         : conditionsMap[x.message_id] || 'anything_else',
       parent: prev.message_id,
       dialog_node: x.message_id,
+      // TODO: doc
       context: Array.isArray(x.payload.context)
         ? x.payload.context.reduce(
             (acc, k) => ({ ...acc, [parseVar(k.name)]: k.default_value }),
@@ -176,7 +178,7 @@ async function getDialogNodes(platform) {
           )
         : {}
     });
-    // We maintain a lookup table relating node id to the intent incident on it
+    // Maintain lookup table relating message_id -> intent incident on it
     for (const y of x.next_message_ids) {
       if (!y.action.payload) {
         continue;
@@ -185,15 +187,4 @@ async function getDialogNodes(platform) {
     }
   }
   return nodes;
-}
-
-function parseVar(str = '') {
-  return str.replace(/%/g, '');
-}
-
-function toDashCase(str = '') {
-  return str
-    .toLowerCase()
-    .replace(/\s/g, '-')
-    .replace(/_/g, '');
 }
