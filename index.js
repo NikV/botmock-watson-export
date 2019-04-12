@@ -67,37 +67,31 @@ try {
 }
 
 async function getIntents() {
-  const res = await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
-  const intents = [];
-  for (const x of res) {
-    intents.push({
-      intent: toDashCase(x.name),
-      examples: x.utterances.map(u => ({ text: u.text || '_' })),
-      created: x.created_at.date,
-      updated: x.updated_at.date
-    });
-  }
-  return intents;
+  return (await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID)).map(
+    intent => ({
+      intent: toDashCase(intent.name),
+      examples: intent.utterances.map(u => ({ text: u.text || '_' })),
+      created: intent.created_at.date,
+      updated: intent.updated_at.date
+    })
+  );
 }
 
 async function getEntities() {
-  const res = await client.entities(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
-  const entities = [];
-  for (const x of res) {
-    entities.push({
-      entity: toDashCase(x.name),
-      created: x.created_at.date,
-      updated: x.updated_at.date,
-      values: x.data.map(p => ({
+  return (await client.entities(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID)).map(
+    entity => ({
+      entity: toDashCase(entity.name),
+      created: entity.created_at.date,
+      updated: entity.updated_at.date,
+      values: entity.data.map(({ value, synonyms }) => ({
         type: 'synonyms',
-        value: p.value,
-        synonyms: Array.isArray(p.synonyms.split)
-          ? p.synonyms.map(toDashCase).split(',')
-          : p.synonyms
+        value,
+        synonyms: !Array.isArray(synonyms)
+          ? synonyms.map(toDashCase).split(',')
+          : synonyms
       }))
-    });
-  }
-  return entities;
+    })
+  );
 }
 
 async function getDialogNodes(platform) {
