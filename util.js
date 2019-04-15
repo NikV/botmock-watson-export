@@ -1,4 +1,27 @@
-export const supportedNodeTypes = new Set(['text', 'button', 'quick_replies']);
+import arg from 'arg';
+
+export function getArgs(argv) {
+  const args = arg(
+    {
+      '--debug': Boolean,
+      '-d': '--debug',
+      '--host': String,
+      '-h': '--host'
+    },
+    { argv }
+  );
+  return {
+    isInDebug: args['--debug'] || false,
+    hostname: args['--host'] || 'app'
+  };
+}
+
+export const supportedNodeTypes = new Set([
+  'text',
+  'image',
+  'button',
+  'quick_replies'
+]);
 
 export function parseVar(str = '') {
   return str.replace(/%/g, '');

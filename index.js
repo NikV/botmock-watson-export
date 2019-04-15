@@ -1,10 +1,9 @@
 (await import('dotenv')).config();
+import fs from 'fs';
 import chalk from 'chalk';
 import Botmock from 'botmock';
-import minimist from 'minimist';
-import fs from 'fs';
 import Provider from './lib/Provider';
-import { parseVar, toDashCase, supportedNodeTypes } from './util';
+import { getArgs, parseVar, toDashCase, supportedNodeTypes } from './util';
 
 process.on('unhandledRejection', err => {
   console.error(err);
@@ -22,14 +21,8 @@ const {
   BOTMOCK_PROJECT_ID,
   BOTMOCK_BOARD_ID
 } = process.env;
-const [, , ...args] = process.argv;
-const { u, d } = minimist(args);
-
-const client = new Botmock({
-  api_token: BOTMOCK_TOKEN,
-  debug: !!d,
-  url: u || 'app'
-});
+const { isInDebug: debug, hostname: url } = getArgs(process.argv);
+const client = new Botmock({ api_token: BOTMOCK_TOKEN, debug, url });
 
 const OUTPUT_PATH = `${__dirname}/out`;
 const template = await fs.promises.readFile(
@@ -115,6 +108,16 @@ async function getDialogNodes(platform) {
         )
       );
     }
+    // TODO: ..
+    // switch (x.message_type) {
+    //   case 'image':
+    //     break;
+    //   case 'button':
+    //   case 'quick_replies':
+    //     break;
+    //   default:
+    //     break;
+    // }
     // We need to hold on to siblings so that we can define a `previous_sibling`
     // from the perspective of another node.
     if (x.next_message_ids.length > 1) {
