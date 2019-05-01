@@ -6,15 +6,13 @@ import fs from 'fs';
 import Provider from './lib/Provider';
 import { getArgs, parseVar, toDashCase, supportedNodeTypes } from './util';
 
-// process.on('unhandledRejection', (reason, p) => {
-//   console.error(reason);
-//   process.exit(1);
-// });
-
-// process.on('uncaughtException', err => {
-//   console.error(err);
-//   process.exit(1);
-// });
+const OUTPUT_PATH = `${process.cwd()}/out`;
+try {
+  await fs.promises.access(OUTPUT_PATH, fs.constants.R_OK);
+} catch (_) {
+  // Create output directory if it does not already exist
+  await fs.promises.mkdir(OUTPUT_PATH);
+}
 
 const {
   BOTMOCK_TOKEN,
@@ -27,29 +25,47 @@ const { isInDebug: debug, hostname: url } = getArgs(process.argv);
 const client = new Botmock({ api_token: BOTMOCK_TOKEN, debug, url });
 const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
 
-const OUTPUT_PATH = `${__dirname}/out`;
-const template = await fs.promises.readFile(
-  `${__dirname}/template.json`,
-  'utf8'
-);
+// Map an intent to its correct object representation
+const getIntentCollection = intent => ({
+  intent: toDashCase(intent.name),
+  examples: intent.utterances.map(u => ({ text: u.text || '_' })),
+  created: intent.created_at.date,
+  updated: intent.updated_at.date
+});
 
-try {
-  await fs.promises.access(OUTPUT_PATH, fs.constants.R_OK);
-} catch (_) {
-  // Create output directory if it does not already exist
-  await fs.promises.mkdir(OUTPUT_PATH);
-}
+// Map an entity to its correct object representation
+const getEntitiesCollection = entity => ({
+  entity: toDashCase(entity.name),
+  created: entity.created_at.date,
+  updated: entity.updated_at.date,
+  values: entity.data.map(({ value, synonyms }) => ({
+    type: 'synonyms',
+    value,
+    synonyms: !Array.isArray(synonyms)
+      ? synonyms.map(toDashCase).split(',')
+      : synonyms
+  }))
+});
 
 // Write a single json file containing the project data
 try {
+  const template = await fs.promises.readFile(
+    `${process.cwd()}/template.json`,
+    'utf8'
+  );
   const deserializedTemplate = JSON.parse(template);
   await fs.promises.writeFile(
     `${OUTPUT_PATH}/${toDashCase(project.name)}.json`,
     JSON.stringify({
       ...deserializedTemplate,
       dialog_nodes: await getDialogNodes(project.platform),
-      intents: await getIntents(),
-      entities: await getEntities(),
+      intents: (await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID)).map(
+        getIntentCollection
+      ),
+      entities: (await client.entities(
+        BOTMOCK_TEAM_ID,
+        BOTMOCK_PROJECT_ID
+      )).map(getEntitiesCollection),
       created: project.created_at.date,
       updated: project.updated_at.date,
       name: project.name
@@ -61,36 +77,8 @@ try {
   process.exit(1);
 }
 
-async function getIntents() {
-  return (await client.intents(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID)).map(
-    intent => ({
-      intent: toDashCase(intent.name),
-      examples: intent.utterances.map(u => ({ text: u.text || '_' })),
-      created: intent.created_at.date,
-      updated: intent.updated_at.date
-    })
-  );
-}
-
-async function getEntities() {
-  return (await client.entities(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID)).map(
-    entity => ({
-      entity: toDashCase(entity.name),
-      created: entity.created_at.date,
-      updated: entity.updated_at.date,
-      values: entity.data.map(({ value, synonyms }) => ({
-        type: 'synonyms',
-        value,
-        synonyms: !Array.isArray(synonyms)
-          ? synonyms.map(toDashCase).split(',')
-          : synonyms
-      }))
-    })
-  );
-}
-
+// Form collection of nodes from messages in the project
 async function getDialogNodes(platform) {
-  const provider = new Provider(platform);
   const { board } = await client.boards(
     BOTMOCK_TEAM_ID,
     BOTMOCK_PROJECT_ID,
@@ -100,85 +88,94 @@ async function getDialogNodes(platform) {
   const nodes = [];
   const conditionsMap = {};
   const siblingMap = {};
-  for (let x of board.messages) {
-    if (!supportedNodeTypes.has(x.message_type)) {
+  const provider = new Provider(platform);
+  // TODO: utils-based fp implementation of this
+  for (const message of board.messages) {
+    if (!supportedNodeTypes.has(message.message_type)) {
       console.warn(
         chalk.dim(
           `"${
-            x.message_type
+            message.message_type
           }" is an unsupported node type and will be coerced to text`
         )
       );
     }
-    // Map the following types to the appropriate Watson types
-    // switch (x.message_type) {
-    //   case 'generic':
-    //   case 'carousel':
-    //   case 'image':
-    //     break;
-    //   case 'button':
-    //   case 'quick_replies':
-    //     break;
-    //   default:
-    //     break;
-    // }
-    // We need to hold on to siblings so that we can define a `previous_sibling`
-    // from the perspective of another node.
-    if (x.next_message_ids.length > 1) {
-      siblingMap[x.message_id] = x.next_message_ids.map(m => m.message_id);
+    // Hold on to sibling nodes to define `previous_sibling` from another node.
+    if (message.next_message_ids.length > 1) {
+      siblingMap[message.message_id] = message.next_message_ids.map(
+        m => m.message_id
+      );
     }
     let previous_sibling;
-    const [prev = {}] = x.previous_message_ids;
+    const [prev = {}] = message.previous_message_ids;
     const siblings = siblingMap[prev.message_id] || [];
-    if ((i = siblings.findIndex(s => x.message_id === s))) {
+    // If there is a sibling with this message id, set the previous_sibling as
+    // the sibling before this one
+    if ((i = siblings.findIndex(s => message.message_id === s))) {
       previous_sibling = siblings[i - 1];
     }
-    const [{ message_id: nextMessageId } = {}] = x.next_message_ids;
+    let response_type;
+    // TODO: ..
+    switch (message.message_type) {
+      case 'image':
+        response_type = 'image';
+        break;
+      case 'button':
+      case 'quick_replies':
+        response_type = 'option';
+        break;
+      default:
+        response_type = 'text';
+    }
     nodes.push({
       output: {
         ...(platform === 'slack'
-          ? { [platform]: provider.create(x.message_type, x.payload) }
+          ? {
+              [platform]: provider.create(message.message_type, message.payload)
+            }
           : {}),
         generic: [
           {
-            response_type: 'text',
+            response_type,
             values: [
               {
-                text: x.is_root
+                text: message.is_root
                   ? `This is a ${platform} project!`
-                  : x.payload.text
+                  : message.payload.text
               }
             ]
           }
         ]
       },
-      title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
-      next_step: x.next_message_ids.every(i => !i.action.payload)
+      title: message.payload.nodeName
+        ? toDashCase(message.payload.nodeName)
+        : 'welcome',
+      next_step: message.next_message_ids.every(i => !i.action.payload)
         ? {
             behavior: 'skip_user_input',
             selector: 'body',
-            dialog_node: nextMessageId
+            dialog_node: message.next_message_ids.slice(0, 1).message_id
           }
         : {
             behavior: 'jump_to',
-            selector: x.is_root ? 'body' : 'user_input',
-            dialog_node: nextMessageId
+            selector: message.is_root ? 'body' : 'user_input',
+            dialog_node: message.next_message_ids.slice(0, 1).message_id
           },
       previous_sibling,
-      conditions: x.is_root
+      conditions: message.is_root
         ? 'welcome'
-        : conditionsMap[x.message_id] || 'anything_else',
+        : conditionsMap[message.message_id] || 'anything_else',
       parent: prev.message_id,
-      dialog_node: x.message_id,
-      context: Array.isArray(x.payload.context)
-        ? x.payload.context.reduce(
+      dialog_node: message.message_id,
+      context: Array.isArray(message.payload.context)
+        ? message.payload.context.reduce(
             (acc, k) => ({ ...acc, [parseVar(k.name)]: k.default_value }),
             {}
           )
         : {}
     });
     // Maintain lookup table relating message_id -> intent incident on it
-    for (const y of x.next_message_ids) {
+    for (const y of message.next_message_ids) {
       if (!y.action.payload) {
         continue;
       }
