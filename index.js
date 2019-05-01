@@ -1,19 +1,20 @@
 (await import('dotenv')).config();
-import fs from 'fs';
-import chalk from 'chalk';
+// import { createNodeCollector } from '@botmock-api/utils'
 import Botmock from 'botmock';
+import chalk from 'chalk';
+import fs from 'fs';
 import Provider from './lib/Provider';
 import { getArgs, parseVar, toDashCase, supportedNodeTypes } from './util';
 
-process.on('unhandledRejection', err => {
-  console.error(err);
-  process.exit(1);
-});
+// process.on('unhandledRejection', (reason, p) => {
+//   console.error(reason);
+//   process.exit(1);
+// });
 
-process.on('uncaughtException', err => {
-  console.error(err);
-  process.exit(1);
-});
+// process.on('uncaughtException', err => {
+//   console.error(err);
+//   process.exit(1);
+// });
 
 const {
   BOTMOCK_TOKEN,
@@ -21,8 +22,10 @@ const {
   BOTMOCK_PROJECT_ID,
   BOTMOCK_BOARD_ID
 } = process.env;
+
 const { isInDebug: debug, hostname: url } = getArgs(process.argv);
 const client = new Botmock({ api_token: BOTMOCK_TOKEN, debug, url });
+const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
 
 const OUTPUT_PATH = `${__dirname}/out`;
 const template = await fs.promises.readFile(
@@ -30,17 +33,16 @@ const template = await fs.promises.readFile(
   'utf8'
 );
 
-// Create output directory if it does not already exist
 try {
   await fs.promises.access(OUTPUT_PATH, fs.constants.R_OK);
 } catch (_) {
+  // Create output directory if it does not already exist
   await fs.promises.mkdir(OUTPUT_PATH);
 }
 
-const project = await client.projects(BOTMOCK_TEAM_ID, BOTMOCK_PROJECT_ID);
+// Write a single json file containing the project data
 try {
   const deserializedTemplate = JSON.parse(template);
-  // Write a single .json file containing the project data
   await fs.promises.writeFile(
     `${OUTPUT_PATH}/${toDashCase(project.name)}.json`,
     JSON.stringify({
@@ -108,8 +110,10 @@ async function getDialogNodes(platform) {
         )
       );
     }
-    // TODO: ..
+    // Map the following types to the appropriate Watson types
     // switch (x.message_type) {
+    //   case 'generic':
+    //   case 'carousel':
     //   case 'image':
     //     break;
     //   case 'button':
@@ -149,7 +153,6 @@ async function getDialogNodes(platform) {
         ]
       },
       title: x.payload.nodeName ? toDashCase(x.payload.nodeName) : 'welcome',
-      // TODO: doc
       next_step: x.next_message_ids.every(i => !i.action.payload)
         ? {
             behavior: 'skip_user_input',
@@ -167,7 +170,6 @@ async function getDialogNodes(platform) {
         : conditionsMap[x.message_id] || 'anything_else',
       parent: prev.message_id,
       dialog_node: x.message_id,
-      // TODO: doc
       context: Array.isArray(x.payload.context)
         ? x.payload.context.reduce(
             (acc, k) => ({ ...acc, [parseVar(k.name)]: k.default_value }),

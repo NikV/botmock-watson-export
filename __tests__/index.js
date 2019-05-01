@@ -1,9 +1,11 @@
-import { promisify } from 'util';
-import { exec as exec_ } from 'child_process';
+const fs = require('fs');
+const { join } = require('path');
+const { exec } = require('child_process');
+const { promisify } = require('util');
 
-const exec = promisify(exec_);
-
-it('initializes', async () => {
-  const { stdout } = await exec('npm start');
-  expect(stdout).toContain('done');
+test('runs', async () => {
+  const { stderr } = await promisify(exec)('npm start');
+  expect(stderr).toContain('');
 });
+
+test.todo('creates non-empty output directory')
