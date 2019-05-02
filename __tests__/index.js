@@ -1,6 +1,13 @@
+const fs = require('fs');
+const { join } = require('path');
+const { exec } = require('child_process');
 const { promisify } = require('util');
-const exec = promisify(require('child_process').exec);
-it('initializes', async () => {
-  const { stdout } = await exec('node index.js -u');
-  expect(stdout).toContain('done');
+
+test('runs', async () => {
+  const { stdout, stderr } = await promisify(exec)('npm start');
+  expect(stdout).toBeTruthy();
+  expect(stderr).toBeFalsy();
 });
+
+test.todo('creates non-empty output directory');
+test.todo('handles projects with loops');
