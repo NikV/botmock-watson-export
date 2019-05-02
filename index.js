@@ -4,7 +4,7 @@ import Botmock from 'botmock';
 import chalk from 'chalk';
 import fs from 'fs';
 import Provider from './lib/Provider';
-import { getArgs, parseVar, toDashCase, supportedNodeTypes } from './util';
+import { getArgs, parseVar, toDashCase } from './util';
 
 const OUTPUT_PATH = `${process.cwd()}/out`;
 try {
@@ -91,15 +91,6 @@ async function getDialogNodes(platform) {
   const provider = new Provider(platform);
   // TODO: utils-based fp implementation of this
   for (const message of board.messages) {
-    if (!supportedNodeTypes.has(message.message_type)) {
-      console.warn(
-        chalk.dim(
-          `"${
-            message.message_type
-          }" is an unsupported node type and will be coerced to text`
-        )
-      );
-    }
     // Hold on to sibling nodes to define `previous_sibling` from another node.
     if (message.next_message_ids.length > 1) {
       siblingMap[message.message_id] = message.next_message_ids.map(
@@ -114,19 +105,46 @@ async function getDialogNodes(platform) {
     if ((i = siblings.findIndex(s => message.message_id === s))) {
       previous_sibling = siblings[i - 1];
     }
-    let response_type;
-    // TODO: ..
+    // Coerce types to their watson equivalents
+    // (see https://cloud.ibm.com/docs/services/assistant?topic=assistant-dialog-responses-json)
+    const generic = {};
     switch (message.message_type) {
       case 'image':
-        response_type = 'image';
+        generic.response_type = 'image';
+        generic.source = message.payload.image_url;
         break;
       case 'button':
       case 'quick_replies':
-        response_type = 'option';
+        const transformPayload = value => ({
+          label: value.title,
+          value: {
+            input: {
+              text: value.payload
+            }
+          }
+        });
+        generic.response_type = 'option';
+        generic.title = message.payload.text || '';
+        generic.options = message.payload.hasOwnProperty(message.message_type)
+          ? message.payload[message.message_type].map(transformPayload)
+          : message.payload[`${message.message_type}s`].map(transformPayload);
+        break;
+      case 'text':
+        generic.response_type = 'text';
+        generic.values = [{ text: message.payload.text || '' }];
         break;
       default:
+        console.warn(
+          chalk.dim(
+            `"${
+              message.message_type
+            }" is an unsupported node type and will be coerced to text`
+          )
+        );
         response_type = 'text';
+        values = [{ text: JSON.stringify(message.payload) }];
     }
+    const [{ message_id: nextMessageId } = {}] = message.next_message_ids;
     nodes.push({
       output: {
         ...(platform === 'slack'
@@ -134,18 +152,7 @@ async function getDialogNodes(platform) {
               [platform]: provider.create(message.message_type, message.payload)
             }
           : {}),
-        generic: [
-          {
-            response_type,
-            values: [
-              {
-                text: message.is_root
-                  ? `This is a ${platform} project!`
-                  : message.payload.text
-              }
-            ]
-          }
-        ]
+        generic: [generic]
       },
       title: message.payload.nodeName
         ? toDashCase(message.payload.nodeName)
@@ -154,12 +161,12 @@ async function getDialogNodes(platform) {
         ? {
             behavior: 'skip_user_input',
             selector: 'body',
-            dialog_node: message.next_message_ids.slice(0, 1).message_id
+            dialog_node: nextMessageId
           }
         : {
             behavior: 'jump_to',
             selector: message.is_root ? 'body' : 'user_input',
-            dialog_node: message.next_message_ids.slice(0, 1).message_id
+            dialog_node: nextMessageId
           },
       previous_sibling,
       conditions: message.is_root

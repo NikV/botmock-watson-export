@@ -4,8 +4,10 @@ const { exec } = require('child_process');
 const { promisify } = require('util');
 
 test('runs', async () => {
-  const { stderr } = await promisify(exec)('npm start');
-  expect(stderr).toContain('');
+  const { stdout, stderr } = await promisify(exec)('npm start');
+  expect(stdout).toBeTruthy();
+  expect(stderr).toBeFalsy();
 });
 
-test.todo('creates non-empty output directory')
+test.todo('creates non-empty output directory');
+test.todo('handles projects with loops');

@@ -16,13 +16,6 @@ export function getArgs(argv) {
   };
 }
 
-export const supportedNodeTypes = new Set([
-  'text',
-  'image',
-  'button',
-  'quick_replies'
-]);
-
 export function parseVar(str = '') {
   return str.replace(/%/g, '');
 }
